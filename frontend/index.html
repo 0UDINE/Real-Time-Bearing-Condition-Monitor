@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bearing Watch — Condition Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #12151A;
+    --panel: #1A1E24;
+    --panel-raised: #20242B;
+    --border: #262B33;
+    --text: #ECEFF3;
+    --text-muted: #7C8794;
+    --normal: #35D07F;
+    --outer: #4DA3FF;
+    --inner: #FFB020;
+    --ball: #FF5C5C;
+    --idle: #3A4048;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+  }
+  .display { font-family: 'Space Grotesk', sans-serif; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .brand h1 {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: 0.01em;
+  }
+  .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); display: inline-block; }
+  .conn-dot.live { background: var(--normal); box-shadow: 0 0 6px var(--normal); }
+
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  select, input, button {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    background: var(--panel-raised);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 7px 10px;
+  }
+  select { min-width: 220px; }
+  input[type=number] { width: 90px; }
+  button {
+    cursor: pointer;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  button:hover { border-color: var(--text-muted); }
+  button#startBtn { background: var(--normal); color: #0A1410; border-color: var(--normal); }
+  button#stopBtn { background: var(--panel-raised); color: var(--ball); border-color: var(--ball); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  label.field { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+
+  main { padding: 22px 28px 40px; max-width: 1240px; margin: 0 auto; }
+
+  .scope-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 18px;
+  }
+  .scope-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-muted); letter-spacing: 0.1em; margin-bottom: 8px; }
+  canvas#scope { width: 100%; height: 110px; display: block; }
+
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 18px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .card h2 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 14px;
+  }
+
+  .status-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    margin-bottom: 4px;
+  }
+  .status-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 18px; }
+  .status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: middle; }
+
+  .confidence-big { font-family: 'IBM Plex Mono', monospace; font-size: 40px; font-weight: 500; margin-bottom: 18px; }
+  .confidence-big span { font-size: 16px; color: var(--text-muted); }
+
+  .prob-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+  .prob-row .name { width: 78px; color: var(--text-muted); text-transform: capitalize; }
+  .prob-row .bar-track { flex: 1; height: 6px; background: var(--panel-raised); border-radius: 3px; overflow: hidden; }
+  .prob-row .bar-fill { height: 100%; border-radius: 3px; transition: width 0.25s ease; }
+  .prob-row .pct { width: 40px; text-align: right; font-family: 'IBM Plex Mono', monospace; }
+
+  canvas#history { width: 100%; height: 220px; display: block; }
+  .legend { display: flex; gap: 16px; margin-top: 10px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .events { margin-top: 18px; }
+  .event-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .event-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--panel-raised);
+    border-left: 3px solid var(--ball);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+  }
+  .event-item .time { color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+  .empty-note { color: var(--text-muted); font-size: 12.5px; padding: 8px 0; }
+
+  footer {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-family: 'IBM Plex Mono', monospace;
+    padding: 20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="conn-dot" id="connDot"></span>
+    <h1 class="display">BEARING WATCH</h1>
+    <span class="eyebrow">Real-time condition monitor</span>
+  </div>
+  <div class="controls">
+    <select id="fileSelect"><option>Loading recordings…</option></select>
+    <label class="field">RPM
+      <input type="number" id="rpmInput" placeholder="auto">
+    </label>
+    <label class="field">Speed
+      <input type="number" id="speedInput" value="4" step="0.5" min="0.1">
+    </label>
+    <button id="startBtn">▶ Start</button>
+    <button id="stopBtn" disabled>■ Stop</button>
+  </div>
+</header>
+
+<main>
+
+  <div class="scope-panel">
+    <div class="scope-label">LIVE SIGNAL — Drive-End acceleration</div>
+    <canvas id="scope"></canvas>
+  </div>
+
+  <div class="grid">
+    <div class="card" id="statusCard">
+      <h2>Predicted condition</h2>
+      <div>
+        <span class="status-dot" id="statusDot" style="background:var(--idle)"></span>
+        <span class="status-label display" id="statusLabel">NO SESSION</span>
+      </div>
+      <div class="status-sub" id="statusSub">Select a recording and press Start to begin monitoring.</div>
+      <div class="confidence-big mono" id="confidenceBig">—<span>confidence</span></div>
+      <div id="probBars"></div>
+    </div>
+
+    <div class="card">
+      <h2>Confidence history</h2>
+      <canvas id="history"></canvas>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--normal)"></span>Normal</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--outer)"></span>Outer race</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--inner)"></span>Inner race</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--ball)"></span>Ball</div>
+      </div>
+
+      <div class="events">
+        <h2 style="margin-top:18px">Event log</h2>
+        <div class="event-list" id="eventList">
+          <div class="empty-note">No alerts yet. An alert fires when the same fault is predicted with high confidence across several consecutive readings.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>bearing-watch · local inference · connects to <span id="wsUrlLabel"></span></footer>
+
+<script>
+const CLASS_COLORS = { 'normal': '#35D07F', 'outer race': '#4DA3FF', 'inner race': '#FFB020', 'ball': '#FF5C5C' };
+const CLASS_ORDER = ['normal', 'outer race', 'inner race', 'ball'];
+
+const scopeCanvas = document.getElementById('scope');
+const historyCanvas = document.getElementById('history');
+let scopeCtx, historyCtx;
+let scopeBuffer = [];
+const SCOPE_MAX_POINTS = 1400;
+let historyData = []; // { label, confidence }
+const HISTORY_MAX_POINTS = 120;
+
+function resizeCanvas(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+function initCanvases() {
+  scopeCtx = resizeCanvas(scopeCanvas);
+  historyCtx = resizeCanvas(historyCanvas);
+  drawScope();
+  drawHistory();
+}
+window.addEventListener('resize', initCanvases);
+
+function drawScope() {
+  const w = scopeCanvas.clientWidth, h = scopeCanvas.clientHeight;
+  scopeCtx.clearRect(0, 0, w, h);
+  // grid
+  scopeCtx.strokeStyle = 'rgba(255,255,255,0.05)';
+  scopeCtx.lineWidth = 1;
+  for (let x = 0; x < w; x += 40) { scopeCtx.beginPath(); scopeCtx.moveTo(x, 0); scopeCtx.lineTo(x, h); scopeCtx.stroke(); }
+  for (let y = 0; y < h; y += 22) { scopeCtx.beginPath(); scopeCtx.moveTo(0, y); scopeCtx.lineTo(w, y); scopeCtx.stroke(); }
+
+  if (scopeBuffer.length < 2) {
+    scopeCtx.fillStyle = '#3A4048';
+    scopeCtx.font = '12px IBM Plex Mono';
+    scopeCtx.fillText('awaiting signal…', 12, h / 2);
+    return;
+  }
+  const maxAbs = Math.max(1e-6, ...scopeBuffer.map(v => Math.abs(v)));
+  scopeCtx.strokeStyle = '#35D07F';
+  scopeCtx.shadowColor = '#35D07F';
+  scopeCtx.shadowBlur = 4;
+  scopeCtx.lineWidth = 1.4;
+  scopeCtx.beginPath();
+  scopeBuffer.forEach((v, i) => {
+    const x = (i / (SCOPE_MAX_POINTS - 1)) * w;
+    const y = h / 2 - (v / maxAbs) * (h / 2 - 8);
+    i === 0 ? scopeCtx.moveTo(x, y) : scopeCtx.lineTo(x, y);
+  });
+  scopeCtx.stroke();
+  scopeCtx.shadowBlur = 0;
+}
+
+function drawHistory() {
+  const w = historyCanvas.clientWidth, h = historyCanvas.clientHeight;
+  historyCtx.clearRect(0, 0, w, h);
+  historyCtx.strokeStyle = 'rgba(255,255,255,0.05)';
+  for (let y = 0; y <= h; y += h / 4) { historyCtx.beginPath(); historyCtx.moveTo(0, y); historyCtx.lineTo(w, y); historyCtx.stroke(); }
+
+  if (historyData.length < 2) {
+    historyCtx.fillStyle = '#3A4048';
+    historyCtx.font = '12px IBM Plex Mono';
+    historyCtx.fillText('no predictions yet', 12, h / 2);
+    return;
+  }
+  const n = historyData.length;
+  historyCtx.lineWidth = 2;
+  for (let i = 1; i < n; i++) {
+    const prev = historyData[i - 1], cur = historyData[i];
+    const x1 = ((i - 1) / (HISTORY_MAX_POINTS - 1)) * w, x2 = (i / (HISTORY_MAX_POINTS - 1)) * w;
+    const y1 = h - prev.confidence * h, y2 = h - cur.confidence * h;
+    historyCtx.strokeStyle = CLASS_COLORS[cur.label] || '#7C8794';
+    historyCtx.beginPath();
+    historyCtx.moveTo(x1, y1);
+    historyCtx.lineTo(x2, y2);
+    historyCtx.stroke();
+  }
+}
+
+function setStatus(label, confidence, probabilities) {
+  const color = CLASS_COLORS[label] || '#3A4048';
+  document.getElementById('statusDot').style.background = color;
+  document.getElementById('statusLabel').textContent = label.toUpperCase();
+  document.getElementById('statusLabel').style.color = color;
+  document.getElementById('statusSub').textContent = label === 'normal'
+    ? 'No fault signature detected in the current window.'
+    : `Possible ${label} fault signature detected.`;
+  document.getElementById('confidenceBig').innerHTML = `${(confidence * 100).toFixed(1)}<span>% confidence</span>`;
+
+  const bars = document.getElementById('probBars');
+  bars.innerHTML = '';
+  CLASS_ORDER.forEach(name => {
+    const p = probabilities[name] || 0;
+    const row = document.createElement('div');
+    row.className = 'prob-row';
+    row.innerHTML = `
+      <span class="name">${name}</span>
+      <span class="bar-track"><span class="bar-fill" style="width:${(p*100).toFixed(1)}%;background:${CLASS_COLORS[name]}"></span></span>
+      <span class="pct mono">${(p*100).toFixed(0)}%</span>`;
+    bars.appendChild(row);
+  });
+}
+
+function addEvent(evt) {
+  const list = document.getElementById('eventList');
+  const emptyNote = list.querySelector('.empty-note');
+  if (emptyNote) emptyNote.remove();
+  const item = document.createElement('div');
+  item.className = 'event-item';
+  item.style.borderLeftColor = CLASS_COLORS[evt.label] || '#FF5C5C';
+  const t = new Date(evt.timestamp * 1000).toLocaleTimeString();
+  item.innerHTML = `<span>${evt.label} fault — ${(evt.confidence*100).toFixed(0)}% confidence</span><span class="time">${t}</span>`;
+  list.prepend(item);
+}
+
+// --- WebSocket wiring ---
+let ws;
+function connectWs() {
+  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/live`;
+  document.getElementById('wsUrlLabel').textContent = url;
+  ws = new WebSocket(url);
+  ws.onopen = () => document.getElementById('connDot').classList.add('live');
+  ws.onclose = () => { document.getElementById('connDot').classList.remove('live'); setTimeout(connectWs, 2000); };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'update') {
+      scopeBuffer.push(...msg.waveform);
+      if (scopeBuffer.length > SCOPE_MAX_POINTS) scopeBuffer = scopeBuffer.slice(-SCOPE_MAX_POINTS);
+      drawScope();
+
+      historyData.push({ label: msg.label, confidence: msg.confidence });
+      if (historyData.length > HISTORY_MAX_POINTS) historyData.shift();
+      drawHistory();
+
+      setStatus(msg.label, msg.confidence, msg.probabilities);
+    } else if (msg.type === 'alert') {
+      addEvent(msg);
+    } else if (msg.type === 'session_ended') {
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+    }
+  };
+}
+
+// --- REST controls ---
+async function loadFiles() {
+  const res = await fetch('/api/files');
+  const data = await res.json();
+  const select = document.getElementById('fileSelect');
+  select.innerHTML = '';
+  if (!data.files || data.files.length === 0) {
+    select.innerHTML = '<option>No .mat files found in SAMPLE_DATA_DIR</option>';
+    return;
+  }
+  data.files.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f; opt.textContent = f.split('/').pop();
+    select.appendChild(opt);
+  });
+}
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  const mat_path = document.getElementById('fileSelect').value;
+  const rpm = document.getElementById('rpmInput').value;
+  const speed = parseFloat(document.getElementById('speedInput').value) || 1.0;
+  const body = { mat_path, playback_speed: speed };
+  if (rpm) body.rpm = parseFloat(rpm);
+
+  const res = await fetch('/api/session/start', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  scopeBuffer = []; historyData = [];
+});
+
+document.getElementById('stopBtn').addEventListener('click', async () => {
+  await fetch('/api/session/stop', { method: 'POST' });
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+});
+
+initCanvases();
+loadFiles();
+connectWs();
+</script>
+</body>
+</html>
