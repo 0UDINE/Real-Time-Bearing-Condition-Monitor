@@ -709,4 +709,4 @@ CWRU .mat ───►│ streaming.py  │
 
 ## License
 
-Add your project's license information here.
+MIT License
